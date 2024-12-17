@@ -39,14 +39,8 @@ class Transformer(nn.Transformer):
         matrix = matrix.masked_fill(matrix == 0, float('-inf')).masked_fill(matrix == 1, 0)
         return matrix
 
-    def forward(self, X_train, y_train, X_test, single_eval_pos, has_mask=True):
-        y_train = y_train.unsqueeze(-1)
-        train = (self.linear_x(X_train) + self.linear_y(y_train))
-        X_test = self.linear_x(X_test)
-        train = torch.cat((train, X_test), dim=0)
-        if not has_mask:
-            train = X_test
-
+    def forward(self, X,single_eval_pos, has_mask=True):
+        train = (self.linear_x(X))
         if has_mask:
             device = train.device
             src_mask = self._generate_mask(train.shape[0], single_eval_pos).to(device)
