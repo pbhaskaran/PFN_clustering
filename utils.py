@@ -5,6 +5,13 @@ import itertools
 import numpy as np
 import torch
 device = torch.device("cuda")
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+from sklearn.cluster import KMeans
+
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+
 
 def compute_split(X, y, y_noisy):
     S, B, _ = X.shape
@@ -44,3 +51,13 @@ def map_labels(permutation, y): # y is of shape S, B and needs to be in shape S*
     targets = targets.reshape(-1).type(torch.LongTensor).to(device)
     return targets
 
+
+def k_means(X_train, num_classes):
+    X_train = X_train.cpu().numpy()
+    kmeans = KMeans(n_clusters=num_classes)
+    kmeans.fit(X_train)
+    return kmeans.labels_
+
+
+def evaluation_metrics():
+    pass
