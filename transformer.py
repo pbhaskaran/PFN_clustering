@@ -39,19 +39,12 @@ class Transformer(nn.Transformer):
         matrix = matrix.masked_fill(matrix == 0, float('-inf')).masked_fill(matrix == 1, 0)
         return matrix
 
-    def forward(self, X,single_eval_pos, has_mask=True):
-        train = (self.linear_x(X))
-        if has_mask:
-            device = train.device
-            src_mask = self._generate_mask(train.shape[0], single_eval_pos).to(device)
-        else:
-            src_mask = None
-        output = self.encoder(train, mask=src_mask)
 
-        # shape (S, B, bucket_size) but we need only need outputs from the queries (m)
+    def forward(self, X, ):
+        train = (self.linear_x(X))
+        src_mask = None
+        output = self.encoder(train, mask=src_mask)
         output = self.decoder(output)
-        # shape (m, B, bucket_size)
-        output = output[single_eval_pos:]
         return output
 
 

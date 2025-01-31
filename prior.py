@@ -8,9 +8,11 @@ import random
 device = torch.device("cuda")
 
 
-def sample_clusters(batch_size=100, seq_len=100, num_features=2, type_='make_blobs', noise=False, num_classes=3,kmeans=False,
+def sample_clusters(batch_size=100, num_features=2, noise=False, num_classes=3,kmeans=False,
                     std_variation=False):
     batch_classes = []
+    # generate sequences from 100 to 200 data points
+    seq_len = random.randint(100, 200)
     clusters_x = np.zeros((batch_size, seq_len, num_features))
     clusters_y = np.zeros((batch_size, seq_len))
     clusters_y_noisy = []
@@ -39,7 +41,7 @@ def sample_clusters(batch_size=100, seq_len=100, num_features=2, type_='make_blo
     clusters_x = clusters_x.permute(1, 0, 2)
     clusters_y = clusters_y.permute(1, 0)
     if kmeans:
-        return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device), batch_classes
+        return clusters_x, clusters_y, clusters_y, batch_classes
 
     return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device)
 
@@ -67,3 +69,42 @@ def sort(x, y, centers):
     return shuffled_x, shuffled_y
 
 
+
+def sample_clusters2(random_state=10, batch_size=100, num_features=2, noise=False, num_classes=3,kmeans=False,
+                    std_variation=False):
+    batch_classes = []
+    # generate sequences from 100 to 200 data points
+    rng = np.random.default_rng(random_state)
+    seq_len = rng.integers(1, 5)
+    clusters_x = np.zeros((batch_size, seq_len, num_features))
+    clusters_y = np.zeros((batch_size, seq_len))
+    clusters_y_noisy = []
+    for i in range(batch_size):
+        random_state += 1
+        rng = np.random.default_rng(random_state)
+        centers = rng.integers(2, num_classes + 1)
+        if std_variation:
+            std = rng.random(centers).tolist()
+        else:
+            std = rng.integers(1, 2)
+        batch_classes.append(centers)
+        x, y = make_blobs(n_samples=seq_len, n_features=num_features, centers=centers, cluster_std=std,
+                          shuffle=True, random_state=random_state)
+        x = preprocessing.MinMaxScaler().fit_transform(x)
+        x, y = sort(x, y, centers)
+        clusters_x[i] = x
+        clusters_y[i] = y
+        if noise:
+            # todo add noise to the target
+            pass
+        else:
+            clusters_y_noisy.append(y)
+
+    clusters_x = torch.tensor(clusters_x, dtype=torch.float32)
+    clusters_y = torch.tensor(clusters_y, dtype=torch.float32)
+    clusters_x = clusters_x.permute(1, 0, 2)
+    clusters_y = clusters_y.permute(1, 0)
+    if kmeans:
+        return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device), batch_classes
+
+    return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device)
