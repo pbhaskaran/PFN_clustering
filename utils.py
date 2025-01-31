@@ -18,7 +18,7 @@ def compute_split(X, y, y_noisy):
     single_eval_pos = random.randint(int(1 * S / 4), int(3 * S / 4))
     return X, y_noisy[single_eval_pos:], single_eval_pos
 
-
+# ayo o
 def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1):
     """ Create a schedule with a learning rate that decreases following the
     values of the cosine function between 0 and `pi * cycles` after a warmup
