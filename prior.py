@@ -40,10 +40,8 @@ def sample_clusters(batch_size=100, num_features=2, noise=False, num_classes=3,k
     clusters_y = torch.tensor(clusters_y, dtype=torch.float32)
     clusters_x = clusters_x.permute(1, 0, 2)
     clusters_y = clusters_y.permute(1, 0)
-    if kmeans:
-        return clusters_x, clusters_y, clusters_y, batch_classes
-
-    return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device)
+    batch_classes = torch.tensor(batch_classes).unsqueeze(0)
+    return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device), batch_classes.to(device)
 
 def sort(x, y, centers):
     distances = np.linalg.norm(x, axis=1)
