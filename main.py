@@ -16,17 +16,26 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size, num_fe
     for e in range(num_epochs):
         model.zero_grad()
         X, y, y_noisy,batch_clusters = prior.sample_clusters(batch_size=batch_size, num_features=num_features, **kwargs)
-        output,batch_cluster_output = model(X)
-        targets = y
-        targets_batch_clusters = batch_clusters
-        output = output.view(-1, output.shape[2])
-        batch_cluster_output = batch_cluster_output.view(-1, batch_cluster_output.shape[2])
-        targets = targets.reshape(-1).type(torch.LongTensor).to(device)
-        targets_batch_clusters = targets_batch_clusters.reshape(-1).type(torch.LongTensor).to(device)
-        targets_batch_clusters -=1 ## super janky
-        loss_output = criterion(output, targets)
-        loss_clusters = criterion(batch_cluster_output, targets_batch_clusters)
-        loss = 0.7 * loss_output + 0.3 * loss_clusters
+        desired_clusters = prior.generate_random_clusters(batch_size, **kwargs)
+        if e % 2 == 0:
+            output,batch_cluster_output = model(X)
+            targets = y
+            targets_batch_clusters = batch_clusters
+            output = output.view(-1, output.shape[2])
+            batch_cluster_output = batch_cluster_output.view(-1, batch_cluster_output.shape[2])
+            targets = targets.reshape(-1).type(torch.LongTensor).to(device)
+            targets_batch_clusters = targets_batch_clusters.reshape(-1).type(torch.LongTensor).to(device)
+            targets_batch_clusters -=1 ## super janky
+            loss_output = criterion(output, targets)
+            loss_clusters = criterion(batch_cluster_output, targets_batch_clusters)
+            loss = loss_output + loss_clusters
+        else:
+            output, _ = model(X, desired_clusters) # shape S, B, E and desired is of length B
+            output = torch.argmax(output, dim=-1)
+            unique_counts = torch.tensor([len(torch.unique(output[:, b])) for b in range(output.shape[1])] ,dtype=torch.float32, requires_grad=True).to(device)
+            desired_clusters = desired_clusters.squeeze(1)
+            mse_loss = nn.MSELoss().to(device=device)
+            loss = mse_loss(unique_counts,desired_clusters)
         loss.backward()
         optimizer.step()
         scheduler.step()
@@ -41,7 +50,7 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size, num_fe
                 e, scheduler.get_last_lr()[0], val_loss))
             model.train()
         if e != 0 and e % 2000 == 0:
-            torch.save(model.state_dict(), f"checkpoint.pt")
+            torch.save(model.state_dict(), f"conditional_five_features.pt")
     end_time = time.time()
     print(f"training completed in {end_time - start_time:.2f} seconds")
     return trains
@@ -49,10 +58,9 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size, num_fe
 
 if __name__ == '__main__':
     print(f"Using device: {torch.cuda.get_device_name(torch.cuda.current_device())}")
-    print("total clustering main 2")
     device = torch.device("cuda")
     d_model, nhead, nhid, nlayers = 256, 4, 512, 4
-    num_epochs = 25000
+    num_epochs = 15000
     lr = 0.001
     num_outputs = 10
     batch_size = 500
@@ -68,4 +76,4 @@ if __name__ == '__main__':
     model.criterion = criterion
     trains = train(model, criterion, num_epochs, optimizer, scheduler, batch_size, in_features,
                         num_classes=num_outputs,std_variation=True)
-    torch.save(model.state_dict(), "saved_model_five_features.pt")
+   # torch.save(model.state_dict(), "saved_model_five_features.pt")

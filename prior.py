@@ -106,3 +106,9 @@ def sample_clusters2(random_state=10, batch_size=100, num_features=2, noise=Fals
         return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device), batch_classes
 
     return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device)
+
+
+def generate_random_clusters(batch_size=100, num_classes=5, **kwargs):
+    t = torch.randint(2, num_classes + 1, (batch_size,), dtype=torch.float32, device=device)
+    return t.unsqueeze(-1)
+
