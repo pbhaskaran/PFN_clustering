@@ -7,15 +7,15 @@ import time
 import transformer
 import torch.nn as nn
 
-def train(model, criterion, num_epochs, optimizer, scheduler, batch_size, num_features, **kwargs):
+def train(model, criterion, num_epochs, optimizer, scheduler, batch_size,seq_len, num_features, **kwargs):
     model.train()
     trains = []
     start_time = time.time()
-    X_val, y_val, y_val_noisy,batch_clusters_val = prior.sample_clusters(batch_size=2 * batch_size, num_features=num_features, **kwargs)
-    random_state = 0
+    random_seed = 0
+    X_val, y_val,X_true,y_true,batch_clusters_val = prior.sample_dirichlet_clusters(batch_size=2 * batch_size,seq_len=seq_len, num_features=num_features)
     for e in range(num_epochs):
         model.zero_grad()
-        X, y, y_noisy,batch_clusters = prior.sample_clusters(batch_size=batch_size, num_features=num_features, **kwargs)
+        X, y, X_true, y_true, batch_clusters = prior.sample_dirichlet_clusters(batch_size=batch_size,seq_len=seq_len, num_features=num_features)
         output,batch_cluster_output = model(X)
         targets = y
         targets_batch_clusters = batch_clusters
@@ -26,12 +26,12 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size, num_fe
         targets_batch_clusters -=1 ## super janky
         loss_output = criterion(output, targets)
         loss_clusters = criterion(batch_cluster_output, targets_batch_clusters)
-        loss = 0.7 * loss_output + 0.3 * loss_clusters
+        loss = loss_output + loss_clusters
         loss.backward()
         optimizer.step()
         scheduler.step()
         trains.append(loss.item())
-        if e % 500 == 0:
+        if e % 1000 == 0:
             model.eval()
             val_output, val_cluster_output = model(X_val)
             val_output = val_output.view(-1, val_output.shape[2])
@@ -40,8 +40,9 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size, num_fe
             print('| epoch {:3d} | lr {} || ''validation loss {:5.3f}'.format(
                 e, scheduler.get_last_lr()[0], val_loss))
             model.train()
-        if e != 0 and e % 2000 == 0:
-            torch.save(model.state_dict(), f"checkpoint.pt")
+        if e != 0 and e % 5000 == 0:
+            torch.save(model.state_dict(), f"checkpoint_dirichlet_{e}.pt")
+        random_seed += 1
     end_time = time.time()
     print(f"training completed in {end_time - start_time:.2f} seconds")
     return trains
@@ -49,14 +50,15 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size, num_fe
 
 if __name__ == '__main__':
     print(f"Using device: {torch.cuda.get_device_name(torch.cuda.current_device())}")
-    print("total clustering main 2")
+    print("dirichlet")
     device = torch.device("cuda")
     d_model, nhead, nhid, nlayers = 256, 4, 512, 4
-    num_epochs = 25000
+    num_epochs = 20000
     lr = 0.001
     num_outputs = 10
-    batch_size = 500
-    in_features = 5
+    batch_size = 250
+    in_features = 2
+    seq_len = 200
     noise = False
     warm_up_epochs = 5
     model = transformer.Transformer(d_model, nhead, nhid, nlayers, in_features=in_features,
@@ -66,6 +68,6 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     scheduler = utils.get_cosine_schedule_with_warmup(optimizer, warm_up_epochs, num_epochs)
     model.criterion = criterion
-    trains = train(model, criterion, num_epochs, optimizer, scheduler, batch_size, in_features,
+    trains = train(model, criterion, num_epochs, optimizer, scheduler, batch_size,seq_len, in_features,
                         num_classes=num_outputs,std_variation=True)
-    torch.save(model.state_dict(), "saved_model_five_features.pt")
+    torch.save(model.state_dict(), "saved_model_dirichlet.pt")
