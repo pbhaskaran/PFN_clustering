@@ -8,13 +8,13 @@ import random
 from scipy.stats import dirichlet, multivariate_normal
 device = torch.device("cuda")
 random_state = 0
-def sample_clusters(batch_size=100, num_features=2, noise=False, num_classes=3,random_seed=0, kmeans=False,
-                    std_variation=False):
+def sample_clusters(batch_size=100, num_features=2,seq_len=200, noise=False, num_classes=3,random_seed=0, kmeans=False,
+                    std_variation=True):
     global random_state
     generator = np.random.default_rng(random_seed)
     batch_classes = []
     # generate sequences from 100 to 200 data points
-    seq_len = generator.integers(low=100, high=201, size=1)[0]
+    seq_len = generator.integers(low=100, high=seq_len, size=1)[0]
     clusters_x = np.zeros((batch_size, seq_len, num_features))
     clusters_y = np.zeros((batch_size, seq_len))
     clusters_y_noisy = []
@@ -28,6 +28,7 @@ def sample_clusters(batch_size=100, num_features=2, noise=False, num_classes=3,r
         random_state += 1
         x = preprocessing.MinMaxScaler().fit_transform(x)
         x, y = sort(x, y, centers)
+        # y -= 1
         clusters_x[i] = x
         clusters_y[i] = y
         clusters_y_noisy.append(y)
@@ -36,8 +37,8 @@ def sample_clusters(batch_size=100, num_features=2, noise=False, num_classes=3,r
     clusters_y = torch.tensor(clusters_y, dtype=torch.float32)
     clusters_x = clusters_x.permute(1, 0, 2)
     clusters_y = clusters_y.permute(1, 0)
-    batch_classes = torch.tensor(batch_classes).unsqueeze(0)
-    return clusters_x.to(device), clusters_y.to(device), clusters_y.to(device),  clusters_y.to(device), batch_classes.to(device)
+    batch_classes = torch.tensor(batch_classes, dtype=torch.long).unsqueeze(0)
+    return clusters_x.to(device), clusters_y.to(device), None,  None, batch_classes.to(device)
 
 def sort(x, y, centers):
     distances = np.linalg.norm(x, axis=1)
@@ -62,7 +63,7 @@ def sort(x, y, centers):
     shuffled_y = y_mapped[indices]
     return shuffled_x, shuffled_y
 
-def sample_dirichlet_clusters(batch_size=100,seq_len=200, num_features=2, num_classes=10):
+def sample_dirichlet_clusters(batch_size=100,seq_len=200, num_features=2, num_classes=10,random_seed=0):
     clusters_x = np.zeros((batch_size, seq_len, num_features))
     clusters_x_true = np.zeros((batch_size, seq_len, num_features))
     clusters_y = np.zeros((batch_size, seq_len))
@@ -71,6 +72,7 @@ def sample_dirichlet_clusters(batch_size=100,seq_len=200, num_features=2, num_cl
     for i in range(batch_size):
         X, y = sample_dirichlet_process_gaussians(n_samples=seq_len,num_features=num_features,num_classes=num_classes, alpha=1, base_mean=0, base_cov=10)
         num_clusters = len(np.unique(y))
+        # y -= 1
         clusters_x_true[i] = X
         clusters_y_true[i] = y
         X = preprocessing.MinMaxScaler().fit_transform(X)
@@ -87,7 +89,7 @@ def sample_dirichlet_clusters(batch_size=100,seq_len=200, num_features=2, num_cl
     clusters_x_true =  clusters_x_true.permute(1, 0, 2)
     clusters_y = clusters_y.permute(1, 0)
     clusters_y_true = clusters_y_true.permute(1,0)
-    batch_classes = torch.tensor(batch_classes).unsqueeze(0)
+    batch_classes = torch.tensor(batch_classes, dtype=torch.long).unsqueeze(0)
     return clusters_x.to(device) , clusters_y.to(device), clusters_x_true.to(device),clusters_y_true.to(device), batch_classes.to(device)
 
 

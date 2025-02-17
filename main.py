@@ -12,11 +12,11 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size,seq_len
     trains = []
     start_time = time.time()
     random_seed = 0
-    X_val, y_val,X_true,y_true,batch_clusters_val = prior.sample_dirichlet_clusters(batch_size=2 * batch_size,seq_len=seq_len, num_features=num_features)
+    X_val, y_val,X_true,y_true,batch_clusters_val = prior.sample_clusters(batch_size=2 * batch_size,seq_len=seq_len, num_features=num_features, random_seed=random_seed)
     for e in range(num_epochs):
         model.zero_grad()
-        X, y, X_true, y_true, batch_clusters = prior.sample_dirichlet_clusters(batch_size=batch_size,seq_len=seq_len, num_features=num_features)
-        output,batch_cluster_output = model(X)
+        X, y, X_true, y_true, batch_clusters = prior.sample_clusters(batch_size=batch_size,seq_len=seq_len, num_features=num_features,random_seed=random_seed)
+        output,batch_cluster_output = model(X, batch_clusters)
         targets = y
         targets_batch_clusters = batch_clusters
         output = output.view(-1, output.shape[2])
@@ -31,9 +31,9 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size,seq_len
         optimizer.step()
         scheduler.step()
         trains.append(loss.item())
-        if e % 1000 == 0:
+        if e % 10 == 0:
             model.eval()
-            val_output, val_cluster_output = model(X_val)
+            val_output, val_cluster_output = model(X_val, batch_clusters_val)
             val_output = val_output.view(-1, val_output.shape[2])
             val_targets = y_val.reshape(-1).type(torch.LongTensor).to(device)
             val_loss = criterion(val_output, val_targets)
