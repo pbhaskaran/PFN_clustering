@@ -8,37 +8,34 @@ import random
 from scipy.stats import dirichlet, multivariate_normal
 device = torch.device("cuda")
 random_state = 0
-def sample_clusters(batch_size=100, num_features=2,seq_len=200, noise=False, num_classes=10,random_seed=0, kmeans=False,
+
+
+def sample_clusters(batch_size=100, num_features=2,seq_len=200, noise=False, num_classes=10,random_seed=0,
                     std_variation=True):
-    global random_state
-    generator = np.random.default_rng(random_seed)
     batch_classes = []
     # generate sequences from 100 to 200 data points
-    seq_len = generator.integers(low=100, high=seq_len, size=1)[0]
+    seq_len = random.randint(100, 200)
     clusters_x = np.zeros((batch_size, seq_len, num_features))
     clusters_y = np.zeros((batch_size, seq_len))
-    clusters_y_noisy = []
     for i in range(batch_size):
-        centers = generator.integers(2, high=num_classes , size=1)[0]
+        centers = random.randint(2, num_classes)
         if std_variation:
-            std = [generator.random() for _ in range(centers)]
+            std = [random.random() for _ in range(centers)]
         batch_classes.append(centers)
         x, y = make_blobs(n_samples=seq_len, n_features=num_features, centers=centers, cluster_std=std,
-                          shuffle=True, random_state=random_state)
-        random_state += 1
+                          shuffle=True)
         x = preprocessing.MinMaxScaler().fit_transform(x)
         x, y = sort(x, y, centers)
-        # y -= 1
         clusters_x[i] = x
         clusters_y[i] = y
-        clusters_y_noisy.append(y)
 
     clusters_x = torch.tensor(clusters_x, dtype=torch.float32)
     clusters_y = torch.tensor(clusters_y, dtype=torch.float32)
     clusters_x = clusters_x.permute(1, 0, 2)
     clusters_y = clusters_y.permute(1, 0)
-    batch_classes = torch.tensor(batch_classes, dtype=torch.long).unsqueeze(0)
-    return clusters_x.to(device), clusters_y.to(device), None,  None, batch_classes.to(device)
+    batch_classes = torch.tensor(batch_classes).unsqueeze(0)
+    return clusters_x.to(device), clusters_y.to(device),None, clusters_y.to(device), batch_classes.to(device)
+
 
 def sort(x, y, centers):
     distances = np.linalg.norm(x, axis=1)
@@ -63,7 +60,7 @@ def sort(x, y, centers):
     shuffled_y = y_mapped[indices]
     return shuffled_x, shuffled_y
 
-def sample_dirichlet_clusters(batch_size=100,seq_len=200, num_features=2, num_classes=10,random_seed=0):
+def sample_dirichlet_clusters(batch_size=100,seq_len=200, num_features=2, num_classes=10,random_seed=0, **kwargs):
     clusters_x = np.zeros((batch_size, seq_len, num_features))
     clusters_x_true = np.zeros((batch_size, seq_len, num_features))
     clusters_y = np.zeros((batch_size, seq_len))
