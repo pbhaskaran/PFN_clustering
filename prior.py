@@ -8,7 +8,7 @@ import random
 from scipy.stats import dirichlet, multivariate_normal
 device = torch.device("cuda")
 random_state = 0
-def sample_clusters(batch_size=100, num_features=2,seq_len=200, noise=False, num_classes=3,random_seed=0, kmeans=False,
+def sample_clusters(batch_size=100, num_features=2,seq_len=200, noise=False, num_classes=10,random_seed=0, kmeans=False,
                     std_variation=True):
     global random_state
     generator = np.random.default_rng(random_seed)
