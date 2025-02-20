@@ -90,7 +90,7 @@ def sample_dirichlet_clusters(batch_size=100,seq_len=200, num_features=2, num_cl
     return clusters_x.to(device) , clusters_y.to(device), clusters_x_true.to(device),clusters_y_true.to(device), batch_classes.to(device)
 
 
-def sample_dirichlet_process_gaussians(n_samples=500,num_features=2,num_classes=10, alpha=1.0, base_mean=0, base_cov=10000):
+def sample_dirichlet_process_gaussians(n_samples=500,num_features=2,num_classes=10, alpha=1.0, base_mean=0, base_cov=10):
     max_clusters = num_classes
     # Base measure (Gaussian prior for means of clusters)
     base_mean = np.zeros(num_features) if isinstance(base_mean, (int, float)) else np.array(base_mean)

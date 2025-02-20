@@ -64,9 +64,9 @@ def k_means(X_train, num_classes):
 
 
 
-def compute_accuracy_metric(model,batch_size, num_features, num_classes,std_variation=True, random_state=42):
-    X,y, _, num_classes_array = prior.sample_clusters(batch_size=batch_size, num_features=num_features,
-                                        num_classes=num_classes,kmeans=True,std_variation=std_variation)
+def compute_accuracy_metric(model,batch_size,seq_len, num_features, num_classes,std_variation=True, random_state=42):
+    X,y, _, num_classes_array = prior.sample_dirichlet_clusters(batch_size=batch_size, num_features=num_features,
+                                        num_classes=num_classes)
 
 
     accuracy_buckets = np.zeros(11)
@@ -191,4 +191,9 @@ def predict_num_classes(model,batch_size, num_features, num_classes,std_variatio
     return f"Proportion of dataset classes predicted correctly: Transformer: {counts_transformer / batch_size:.2f}, BGM: {counts_gmm_bayes / batch_size:.2f}"
 
 
+    def num_classes_correctly_predicted():
+        pass
 
+
+    def num_classe():
+        pass

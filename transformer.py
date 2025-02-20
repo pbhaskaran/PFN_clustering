@@ -24,7 +24,7 @@ class Transformer(nn.Transformer):
         self.nhead = nhead
         self.nhid = nhid
         self.nlayers = nlayers
-        self.embed_size = d_model // 2
+        self.embed_size = d_model // 2# todo might need to change
         self.linear_x = nn.Sequential(Normalize(.5, math.sqrt(1 / 12)), nn.Linear(in_features, d_model))
         self.linear_num_clusters = nn.Linear(in_features, d_model)
         self.decoder = nn.Linear(d_model + self.embed_size, buckets_size)
@@ -42,7 +42,7 @@ class Transformer(nn.Transformer):
         train = (self.linear_x(X))
         cluster_input = torch.full((1,X.shape[1], X.shape[2]), -1, dtype=torch.float, device=device)
         cluster_embedding = self.linear_num_clusters(cluster_input)
-        train  = torch.cat((train, cluster_embedding) , dim=0)
+        train = torch.cat((train, cluster_embedding) , dim=0)
         src_mask = self._generate_mask(train.shape[0])
         output = self.encoder(train, mask=src_mask) # S, B, E
 
