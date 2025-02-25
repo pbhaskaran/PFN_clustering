@@ -1,5 +1,7 @@
 import random
 import math
+
+from sklearn.metrics.cluster import contingency_matrix
 from torch.optim.lr_scheduler import LambdaLR
 import itertools
 import numpy as np
@@ -15,8 +17,11 @@ from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 from sklearn.mixture import GaussianMixture
 from sklearn.mixture import BayesianGaussianMixture
-
-
+from scipy.optimize import linear_sum_assignment
+from sklearn.metrics import davies_bouldin_score
+from sklearn.metrics import silhouette_score
+from sklearn.metrics import calinski_harabasz_score
+from sklearn.metrics import cluster
 
 def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1):
     """ Create a schedule with a learning rate that decreases following the
@@ -44,7 +49,7 @@ def map_labels(permutation, y): # y is of shape S, B and needs to be in shape S*
     for key, value in mapping.items():
         mapping_tensor[key] = value
     y= y.long()
-    targets = mapping_tensor[y]
+    targets = mapping_tensor[y].unsqueeze(1)
     targets = targets.reshape(-1).type(torch.LongTensor).to(device)
     return targets
 
@@ -66,16 +71,23 @@ def compute_accuracy_distribution_transformer(X, y, batch_classes, model, **kwar
     logits = logits.cpu()
     batch_classes = batch_classes.permute(1, 0)
     for batch_index, num_class in enumerate(batch_classes):
-        prediction = logits[:, batch_index, :].argmax(dim=-1)  # logits of shape S,1
-        permutations = permute(num_classes=num_class.cpu().item()) # Need to change this
         targets = y[:, batch_index]
-        accuracy = accuracy_score(prediction.cpu().numpy(), targets.cpu().numpy()) * 100
-
-        for permutation in permutations:
-            target = map_labels(permutation, targets)
-            curr_accuracy = accuracy_score(target.cpu().numpy(), prediction.cpu().numpy()) * 100
-            if curr_accuracy > accuracy:
-                accuracy = curr_accuracy
+        prediction = logits[:, batch_index, :].argmax(dim=-1).cpu().numpy()  # logits of shape S,1
+        unique_pred_classes = np.unique(prediction)
+        if len(unique_pred_classes) == num_class:
+            mapping  = {val: i for i, val in enumerate(unique_pred_classes)}
+            mapped_prediction = [mapping[i] for i in prediction]
+            mapped_labels = optimal_label_mapping(targets.cpu().numpy(), mapped_prediction)
+            accuracy = accuracy_score(targets.cpu().numpy(), mapped_labels) * 100
+        else:
+            accuracy = 0
+            permutations = permute(num_classes=num_class.cpu().numpy().item())
+            for permutation in permutations:
+                target = map_labels(permutation, targets)
+                curr_accuracy = accuracy_score(target.cpu().numpy(), prediction) * 100
+                if curr_accuracy > accuracy:
+                    accuracy = curr_accuracy
+            #accuracy = accuracy_score(targets.cpu().numpy(),prediction)
         acc_bucket = int(accuracy / 10)
         accuracy_buckets[acc_bucket] += 1
     return accuracy_buckets
@@ -94,18 +106,12 @@ def compute_accuracy_distribution_sklearn(X, y, batch_classes, model_type, **kwa
             print("Model not found")
         input_fit = X[: , batch_index, :].cpu()
         model.fit(input_fit)
-        targets = y[:, batch_index]
+        targets = y[:, batch_index].cpu().numpy()
         labels = model.predict(input_fit)
-        accuracy = 0
-        permutations =permute(num_classes=num_class)
-        for permutation in permutations:
-            target = map_labels(permutation, targets)
-            curr_accuracy = accuracy_score(target.cpu().numpy(), labels) * 100
-            if curr_accuracy > accuracy:
-                accuracy = curr_accuracy
+        mapped_labels = optimal_label_mapping(targets, labels)
+        accuracy = accuracy_score(targets, mapped_labels) * 100
         acc_bucket = int(accuracy / 10)
         accuracy_buckets[acc_bucket] += 1
-
     return accuracy_buckets
 
 
@@ -124,30 +130,105 @@ def plot_accuracy_metric(accuracy_buckets, model_name):
     plt.show()
 
 
-# def predict_num_classes(model,batch_size, num_features, num_classes,std_variation=True,exact=False, random_state=42):
-#     X,y, _, num_classes_array = prior.sample_clusters(batch_size=batch_size, num_features=num_features,
-#                                         num_classes=num_classes,kmeans=True,std_variation=std_variation)
-#
-#     logits = model(X.to(device))
-#     logits = logits.cpu()
-#     counts_transformer = 0
-#     counts_gmm_bayes = 0
-#
-#     for batch_index, num_class in enumerate(num_classes_array):
-#         if exact:
-#             n_components = num_class
-#         else:
-#             n_components = num_classes
-#         prediction = logits[:, batch_index, :].argmax(dim=-1)
-#         gmm_bayes = BayesianGaussianMixture(n_components=n_components, random_state=42)
-#         gmm_bayes.fit(X[:, batch_index, :])
-#         gmm_bayes_labels = gmm_bayes.predict(X[:, batch_index, :])
-#         transformer_labels = len(np.unique(prediction))
-#         gmm_bayes_labels = len(np.unique(gmm_bayes_labels))
-#         if transformer_labels == num_class:
-#             counts_transformer += 1
-#         if gmm_bayes_labels == num_class:
-#             counts_gmm_bayes += 1
-#
-#     return (f"Proportion of dataset classes predicted correctly: Transformer:"
-#             f" {counts_transformer / batch_size:.2f}, BGM: {counts_gmm_bayes / batch_size:.2f}")
+def optimal_label_mapping(true_labels, pred_labels):
+    true_classes = np.unique(true_labels)
+    pred_classes = np.unique(pred_labels)
+    n_classes = max(len(true_classes), len(pred_classes))
+
+    cost_matrix = np.zeros((n_classes, n_classes), dtype=np.int32)
+
+    for i, true_class in enumerate(true_classes):
+        for j, pred_class in enumerate(pred_classes):
+            cost_matrix[i, j] = np.sum((true_labels == true_class) & (pred_labels == pred_class))
+
+    cost_matrix = -cost_matrix  # Because we want to maximize matches
+
+    # Solve assignment problem using Hungarian algorithm
+    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+    # Create mapping: predicted class -> true class
+    mapping = {pred_classes[j]: true_classes[i] for i, j in zip(row_ind, col_ind)}
+    mapped_preds = np.array([mapping[label] for label in pred_labels])
+    return mapped_preds
+
+
+
+def compute_internal_metrics(X, y, metric):
+    # X is of shape S,B,F
+    # y is of Shape S, B
+    batch_size = X.shape[1]
+    scores = []
+    for i in range(batch_size):
+        curr_dataset = X[:,i, :]
+        curr_labels = y[:, i]
+        if np.unique(curr_labels).size != 1:
+            if metric == 'dbi':
+                scores.append(davies_bouldin_score(curr_dataset, curr_labels))
+            elif metric == 'silhouette':
+                scores.append(silhouette_score(curr_dataset, curr_labels))
+            elif metric == 'ch':
+                scores.append(calinski_harabasz_score(curr_dataset, curr_labels))
+            else:
+                print("metric not found/implemented")
+    plt.figure(figsize=(8, 5))
+    plt.hist(scores, bins=15, edgecolor="black", alpha=0.7)
+    plt.xlabel(f"{metric} index")
+    plt.ylabel("Frequency")
+    plt.title(f"{metric} Distribution Across {batch_size} Datasets")
+    plt.axvline(np.median(scores), color='red', linestyle='dashed', linewidth=2, label=f"median {metric}")
+    plt.legend()
+    plt.show()
+    return scores
+
+def compute_external_metrics(y_true, y, metric):
+    # purity, rand index, f-measure,
+    batch_size = y_true.shape[1]
+    scores = []
+
+    for i in range(batch_size):
+        if metric == 'purity':
+            y_true_curr=  y_true[:,i]
+            y_curr= y[:,i]
+            matrix = cluster.contingency_matrix(y_true_curr, y_curr)
+            scores.append(np.sum(np.amax(matrix, axis=0)) / np.sum(matrix))
+        elif  metric == 'rand_index':
+            pass
+        elif metric == 'f-measure':
+            pass
+        else:
+            print("metric not found/implemented")
+
+    plt.figure(figsize=(8, 5))
+    plt.hist(scores, bins=15, edgecolor="black", alpha=0.7)
+    plt.xlabel(f"{metric} ")
+    plt.ylabel("Frequency")
+    plt.title(f"{metric} Distribution Across {batch_size} Datasets")
+    plt.axvline(np.median(scores), color='red', linestyle='dashed', linewidth=2, label=f"median {metric}")
+    plt.legend()
+    plt.show()
+
+def get_labels_bayesian_gmm(X, n_components=10,random_state=42):
+    model = BayesianGaussianMixture(n_components=n_components, random_state=random_state)
+    batch_size = X.shape[1]
+    labels = np.zeros((X.shape[0], batch_size))
+    for batch in range(batch_size):
+        X_curr = X[:,batch,:]
+        model.fit(X_curr)
+        prediction = model.predict(X_curr)
+        labels[:, batch] = prediction
+    return labels
+
+def get_labels_gmm(X, y, batch_classes):
+    pass
+
+def get_labels_kmeans(X, y, batch_classes):
+    pass
+
+
+def correct_clusters_calculated(model, X,batch_classes):
+    logits, cluster_prediction = model(X, batch_classes)
+    batch_classes = batch_classes.squeeze(0).cpu()
+    predictions = torch.argmax(logits, -1)
+    unique_counts = torch.tensor([torch.unique(predictions[:, i]).numel() for i in range(predictions.shape[1])]).cpu()
+    equal_count = torch.sum(unique_counts == batch_classes).item()
+    return (equal_count / len(unique_counts)) * 100

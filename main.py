@@ -54,10 +54,10 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size,seq_len
         optimizer.step()
         scheduler.step()
         trains.append(loss.item())
-        if e % 10 == 0:
+        if e % 1000 == 0:
             validate(model, criterion, X_val, y_val, val_mask, e, scheduler)
         if e > 0 and e % 2000 == 0:
-            torch.save(model.state_dict(), f"check_point_half_dim_dirichlet_01.pt")
+            torch.save(model.state_dict(), f"check_point_make_blobs_ojas.pt")
         random_seed += 1
     end_time = time.time()
     print(f"training completed in {end_time - start_time:.2f} seconds")
@@ -68,14 +68,15 @@ if __name__ == '__main__':
     print("conditional")
     device = torch.device("cuda")
     d_model, nhead, nhid, nlayers = 256, 4, 512, 4
-    num_epochs = 20000
+    num_epochs = 100000
     lr = 0.001
     num_outputs = 10
     batch_size = 150
     in_features = 2
-    seq_len = 200
+    seq_len = 500
     noise = False
     warm_up_epochs = 5
+    cluster_type = 'make_blobs'
     model = transformer.Transformer(d_model, nhead, nhid, nlayers, in_features=in_features,
                                     buckets_size=num_outputs).to(device)
     print(f"total params:{sum(p.numel() for p in model.parameters())}")
@@ -83,6 +84,5 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     scheduler = utils.get_cosine_schedule_with_warmup(optimizer, warm_up_epochs, num_epochs)
     model.criterion = criterion
-    trains = train(model, criterion, num_epochs, optimizer, scheduler, batch_size,seq_len, in_features,
-                        num_classes=num_outputs,std_variation=True)
-    torch.save(model.state_dict(), "saved_model_half_dim_dirichlet_01.pt")
+    trains = train(model, criterion, num_epochs, optimizer, scheduler, batch_size, seq_len, in_features,num_classes=num_outputs,cluster_type=cluster_type)
+    torch.save(model.state_dict(), "saved_model_make_blobs_ojas.pt")

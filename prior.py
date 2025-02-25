@@ -20,18 +20,21 @@ def sample_clusters(batch_size=100, num_features=2, seq_len=200, num_classes=10,
     else:
         print("cluster type not found!")
 
-def sample_make_blob_clusters(batch_size=100,seq_len=200, num_features=2, num_classes=10,**kwargs):
+def sample_make_blob_clusters(batch_size=100, seq_len=300, num_features=2, num_classes=10, **kwargs):
     batch_classes = []
     # generate sequences from 100 to 200 data points
     seq_len = random.randint(100, seq_len)
     clusters_x = np.zeros((batch_size, seq_len, num_features))
     clusters_y = np.zeros((batch_size, seq_len))
     clusters_x_true = np.zeros((batch_size, seq_len, num_features))
+
     for i in range(batch_size):
-        centers = random.randint(2, num_classes)
-        std = [random.random() for _ in range(centers)]
+        centers = random.randint(1, num_classes)
+        n_samples = fill_buckets_dirichlet(seq_len, centers, None)
+        std = [random.uniform(0.5, 2.0) for _ in range(centers)]
+        centers_arr = np.random.uniform(-10, 10, size=(centers, 2))
         batch_classes.append(centers)
-        X_true, y = make_blobs(n_samples=seq_len, n_features=num_features, centers=centers, cluster_std=std,
+        X_true, y = make_blobs(n_samples=n_samples, n_features=num_features, centers=centers_arr, cluster_std=std,
                           shuffle=True)
         x = preprocessing.MinMaxScaler().fit_transform(X_true)
         x, y, X_true = sort(x, y,X_true, centers)
@@ -40,7 +43,7 @@ def sample_make_blob_clusters(batch_size=100,seq_len=200, num_features=2, num_cl
         clusters_y[i] = y
 
     clusters_x_true = torch.tensor(clusters_x_true, dtype=torch.float32)
-    clusters_x_true =  clusters_x_true.permute(1, 0, 2)
+    clusters_x_true = clusters_x_true.permute(1, 0, 2)
     clusters_x = torch.tensor(clusters_x, dtype=torch.float32)
     clusters_x = clusters_x.permute(1, 0, 2)
     clusters_y = torch.tensor(clusters_y, dtype=torch.float32)
@@ -130,3 +133,16 @@ def sample_dirichlet_process_gaussians(n_samples=500,num_features=2,num_classes=
     return X, cluster_indices_mapped
 
 
+def fill_buckets_dirichlet(total=150, n_buckets=5, alpha=None):
+    if alpha is None:
+        alpha = np.ones(n_buckets)
+
+    min_count = 10
+    remaining_total = total - (n_buckets * min_count)
+    proportions = np.random.dirichlet(alpha)
+    additional_counts = np.round(proportions * remaining_total).astype(int)
+    diff = remaining_total - additional_counts.sum()
+    additional_counts[:abs(diff)] += np.sign(diff)
+
+    bucket_counts = additional_counts + min_count
+    return bucket_counts
