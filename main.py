@@ -57,7 +57,7 @@ def train(model, criterion, num_epochs, optimizer, scheduler, batch_size,seq_len
         if e % 1000 == 0:
             validate(model, criterion, X_val, y_val, val_mask, e, scheduler)
         if e > 0 and e % 2000 == 0:
-            torch.save(model.state_dict(), f"check_point_make_blobs_ojas.pt")
+            torch.save(model.state_dict(), f"check_point_make_blobs.pt")
         random_seed += 1
     end_time = time.time()
     print(f"training completed in {end_time - start_time:.2f} seconds")
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     lr = 0.001
     num_outputs = 10
     batch_size = 150
-    in_features = 2
+    in_features = 5
     seq_len = 500
     noise = False
     warm_up_epochs = 5
@@ -85,4 +85,4 @@ if __name__ == '__main__':
     scheduler = utils.get_cosine_schedule_with_warmup(optimizer, warm_up_epochs, num_epochs)
     model.criterion = criterion
     trains = train(model, criterion, num_epochs, optimizer, scheduler, batch_size, seq_len, in_features,num_classes=num_outputs,cluster_type=cluster_type)
-    torch.save(model.state_dict(), "saved_model_make_blobs_ojas.pt")
+    torch.save(model.state_dict(), "saved_model_make_blobs.pt")

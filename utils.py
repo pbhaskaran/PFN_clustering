@@ -1,18 +1,15 @@
 import random
 import math
-
 from sklearn.metrics.cluster import contingency_matrix
 from torch.optim.lr_scheduler import LambdaLR
 import itertools
 import numpy as np
 import torch
-device = torch.device("cuda")
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.cluster import KMeans
 import prior
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 from sklearn.mixture import GaussianMixture
@@ -21,7 +18,14 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import davies_bouldin_score
 from sklearn.metrics import silhouette_score
 from sklearn.metrics import calinski_harabasz_score
+from sklearn.metrics import rand_score
+from sklearn.metrics import fowlkes_mallows_score
+from sklearn.metrics import normalized_mutual_info_score
+from sklearn.metrics import adjusted_mutual_info_score
 from sklearn.metrics import cluster
+
+device = torch.device("cuda")
+os.environ["OMP_NUM_THREADS"] = "1"
 
 def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1):
     """ Create a schedule with a learning rate that decreases following the
@@ -186,15 +190,19 @@ def compute_external_metrics(y_true, y, metric):
     scores = []
 
     for i in range(batch_size):
+        y_true_curr = y_true[:, i]
+        y_curr = y[:, i]
         if metric == 'purity':
-            y_true_curr=  y_true[:,i]
-            y_curr= y[:,i]
             matrix = cluster.contingency_matrix(y_true_curr, y_curr)
             scores.append(np.sum(np.amax(matrix, axis=0)) / np.sum(matrix))
         elif  metric == 'rand_index':
-            pass
-        elif metric == 'f-measure':
-            pass
+            scores.append(rand_score(y_true_curr, y_curr))
+        elif metric == 'fmi':
+            scores.append(fowlkes_mallows_score(y_true_curr, y_curr))
+        elif metric == 'nmi':
+            scores.append(normalized_mutual_info_score(y_true_curr, y_curr))
+        elif metric == 'ami':
+            scores.append(adjusted_mutual_info_score(y_true_curr, y_curr))
         else:
             print("metric not found/implemented")
 
@@ -203,7 +211,9 @@ def compute_external_metrics(y_true, y, metric):
     plt.xlabel(f"{metric} ")
     plt.ylabel("Frequency")
     plt.title(f"{metric} Distribution Across {batch_size} Datasets")
-    plt.axvline(np.median(scores), color='red', linestyle='dashed', linewidth=2, label=f"median {metric}")
+    plt.axvline(np.median(scores), color='red', linestyle='dashed', linewidth=1, label=f"median {metric}")
+    plt.axvline(np.mean(scores), color='black', linestyle='dotted', linewidth=1, label=f"mean {metric}")
+
     plt.legend()
     plt.show()
 
@@ -218,17 +228,37 @@ def get_labels_bayesian_gmm(X, n_components=10,random_state=42):
         labels[:, batch] = prediction
     return labels
 
-def get_labels_gmm(X, y, batch_classes):
-    pass
+def get_labels_gmm(X, batch_classes, random_state=42):
+    batch_classes = batch_classes.permute(1, 0)
+    batch_classes = batch_classes.unsqueeze(-1)
+    batch_size = X.shape[1]
+    labels = np.zeros((X.shape[0], batch_size))
+    for batch_index in range(len(batch_classes)):
+        X_curr = X[:, batch_index, :]
+        batch = batch_classes[batch_index].item()
+        model = GaussianMixture(random_state=random_state, n_components = batch)
+        model.fit(X_curr)
+        prediction = model.predict(X_curr)
+        labels[:, batch_index] = prediction
+    return labels
 
 def get_labels_kmeans(X, y, batch_classes):
     pass
 
 
-def correct_clusters_calculated(model, X,batch_classes):
+def correct_clusters_calculated(model, X,batch_classes, threshold = 0):
     logits, cluster_prediction = model(X, batch_classes)
     batch_classes = batch_classes.squeeze(0).cpu()
     predictions = torch.argmax(logits, -1)
     unique_counts = torch.tensor([torch.unique(predictions[:, i]).numel() for i in range(predictions.shape[1])]).cpu()
-    equal_count = torch.sum(unique_counts == batch_classes).item()
-    return (equal_count / len(unique_counts)) * 100
+    total_sum = 0
+    for unique_count, batch_class in zip(unique_counts, batch_classes):
+        if unique_count > batch_class:
+            print("predicted higher")
+        # Check if the unique count is within the batch_class range of [batch_class - 1, batch_class + 1]
+        if batch_class - threshold <= unique_count <= batch_class + threshold:
+            total_sum += 1
+    return (total_sum / len(unique_counts)) * 100
+
+
+
